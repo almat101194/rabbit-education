@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messages</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: sans-serif;
+            background: #f4f6f9;
+            color: #333;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        h1 { text-align: center; margin-bottom: 28px; font-size: 22px; }
+
+        /* --- Auth --- */
+        .auth-card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 32px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+        }
+
+        .auth-tabs {
+            display: flex;
+            margin-bottom: 24px;
+            border-bottom: 2px solid #e8eaed;
+        }
+
+        .auth-tab {
+            flex: 1;
+            padding: 10px;
+            background: none;
+            border: none;
+            font-size: 15px;
+            cursor: pointer;
+            color: #999;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .auth-tab.active { color: #4a90e2; border-bottom-color: #4a90e2; font-weight: 600; }
+
+        .auth-field {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input:focus { border-color: #4a90e2; }
+
+        .btn-primary {
+            width: 100%;
+            padding: 11px;
+            background: #4a90e2;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-primary:hover { background: #357abd; }
+
+        .error-msg { color: #e74c3c; font-size: 13px; margin-top: 10px; text-align: center; min-height: 18px; }
+
+        /* --- App --- */
+        #app { display: none; }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .topbar span { font-size: 14px; color: #666; }
+
+        .btn-logout {
+            padding: 6px 14px;
+            background: #eee;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .btn-logout:hover { background: #ddd; }
+
+        .form-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .form-row input { flex: 1; }
+
+        .btn-add {
+            padding: 10px 18px;
+            background: #4a90e2;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .btn-add:hover { background: #357abd; }
+
+        .message-list { display: flex; flex-direction: column; gap: 10px; }
+
+        .message-card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 14px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        }
+
+        .message-info { display: flex; flex-direction: column; gap: 4px; }
+        .message-content { font-size: 15px; }
+        .message-date { font-size: 12px; color: #999; }
+
+        .btn-delete {
+            padding: 6px 12px;
+            background: #e74c3c;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .btn-delete:hover { background: #c0392b; }
+
+        .empty { text-align: center; color: #aaa; padding: 30px 0; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Messages</h1>
+
+    <!-- Auth -->
+    <div id="authBlock" class="auth-card">
+        <div class="auth-tabs">
+            <button class="auth-tab active" onclick="switchTab('login')">Войти</button>
+            <button class="auth-tab" onclick="switchTab('register')">Регистрация</button>
+        </div>
+        <div class="auth-field">
+            <input type="text" id="authUsername" placeholder="Имя пользователя" />
+            <input type="password" id="authPassword" placeholder="Пароль" />
+        </div>
+        <button class="btn-primary" id="authBtn" onclick="submitAuth()">Войти</button>
+        <div class="error-msg" id="authError"></div>
+    </div>
+
+    <!-- App -->
+    <div id="app">
+        <div class="topbar">
+            <span>Привет, <b id="usernameLabel"></b></span>
+            <button class="btn-logout" onclick="logout()">Выйти</button>
+        </div>
+        <div class="form-row">
+            <input type="text" id="messageInput" placeholder="Введите сообщение..." />
+            <button class="btn-add" onclick="sendMessage()">Отправить</button>
+        </div>
+        <div class="message-list" id="messageList"></div>
+    </div>
+</div>
+
+<script>
+    const API = '/api/messages';
+    const AUTH_API = '/api/auth';
+    let currentTab = 'login';
+
+    function getToken() { return localStorage.getItem('jwt_token'); }
+    function getUsername() { return localStorage.getItem('username'); }
+
+    function authHeaders() {
+        return { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json' };
+    }
+
+    function switchTab(tab) {
+        currentTab = tab;
+        document.querySelectorAll('.auth-tab').forEach((el, i) => {
+            el.classList.toggle('active', (i === 0 && tab === 'login') || (i === 1 && tab === 'register'));
+        });
+        document.getElementById('authBtn').textContent = tab === 'login' ? 'Войти' : 'Зарегистрироваться';
+        document.getElementById('authError').textContent = '';
+    }
+
+    async function submitAuth() {
+        const username = document.getElementById('authUsername').value.trim();
+        const password = document.getElementById('authPassword').value.trim();
+        if (!username || !password) return;
+
+        const endpoint = currentTab === 'login' ? '/login' : '/register';
+        const res = await fetch(AUTH_API + endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        if (!res.ok) {
+            const text = await res.text();
+            document.getElementById('authError').textContent = text || 'Ошибка авторизации';
+            return;
+        }
+
+        const data = await res.json();
+        localStorage.setItem('jwt_token', data.token);
+        localStorage.setItem('username', data.username);
+        showApp();
+    }
+
+    function logout() {
+        localStorage.removeItem('jwt_token');
+        localStorage.removeItem('username');
+        document.getElementById('app').style.display = 'none';
+        document.getElementById('authBlock').style.display = 'block';
+        document.getElementById('authUsername').value = '';
+        document.getElementById('authPassword').value = '';
+    }
+
+    function showApp() {
+        document.getElementById('authBlock').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        document.getElementById('usernameLabel').textContent = getUsername();
+        loadMessages();
+    }
+
+    async function loadMessages() {
+        const res = await fetch(API, { headers: authHeaders() });
+        if (res.status === 401) { logout(); return; }
+        const messages = await res.json();
+        const list = document.getElementById('messageList');
+        if (messages.length === 0) {
+            list.innerHTML = '<div class="empty">Сообщений пока нет</div>';
+            return;
+        }
+        list.innerHTML = messages.map(m => `
+            <div class="message-card" id="msg-${m.id}">
+                <div class="message-info">
+                    <span class="message-content">${escapeHtml(m.content)}</span>
+                    <span class="message-date">${formatDate(m.createdAt)}</span>
+                </div>
+                <button class="btn-delete" onclick="deleteMessage(${m.id})">Удалить</button>
+            </div>
+        `).join('');
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('messageInput');
+        const content = input.value.trim();
+        if (!content) return;
+        await fetch(API, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ content })
+        });
+        input.value = '';
+        loadMessages();
+    }
+
+    async function deleteMessage(id) {
+        await fetch(`${API}/${id}`, { method: 'DELETE', headers: authHeaders() });
+        loadMessages();
+    }
+
+    function escapeHtml(str) {
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function formatDate(iso) {
+        if (!iso) return '';
+        return new Date(iso).toLocaleString('ru-RU');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('authPassword').addEventListener('keydown', e => {
+            if (e.key === 'Enter') submitAuth();
+        });
+        document.getElementById('messageInput')?.addEventListener('keydown', e => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        if (getToken()) {
+            showApp();
+        }
+    });
+</script>
+</body>
+</html>
